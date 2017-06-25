@@ -68,12 +68,15 @@ def main(_):
   # Test trained model
   correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
   accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-  print(sess.run(accuracy, feed_dict={x: mnist.test.images,
-                                      y_: mnist.test.labels}))
+  print('Here come the results...')
+  print(sess.run(accuracy, feed_dict={x: mnist.test.images,y_: mnist.test.labels}))
 
 if __name__ == '__main__':
+  print('Starting main...')
   parser = argparse.ArgumentParser()
   parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data',
                       help='Directory for storing input data')
   FLAGS, unparsed = parser.parse_known_args()
+  print('tf.app.run...')
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  print('It worked?')
