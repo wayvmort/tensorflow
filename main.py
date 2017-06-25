@@ -1,71 +1,79 @@
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2' # to suppress warnings about TensorFlow not using SSE and other CPU optimizations
-import numpy as np
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+"""A very simple MNIST classifier.
+
+See extensive documentation at
+https://www.tensorflow.org/get_started/mnist/beginners
+"""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import argparse
+import sys
+
+from tensorflow.examples.tutorials.mnist import input_data
+
 import tensorflow as tf
 
-#---------------------------------------------------------------------------------------------------
-# Method 1: Use TensorFlow the old fashioned way to estimate W (aka M) and b using gradient descent
-#---------------------------------------------------------------------------------------------------
+FLAGS = None
 
-# Model parameters
-W = tf.Variable([.3], tf.float32)
-b = tf.Variable([-.3], tf.float32)
 
-# Model input and output
-x = tf.placeholder(tf.float32)
-linear_model = W * x + b
-y = tf.placeholder(tf.float32)
+def main(_):
+  # Import data
+  mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
-# loss
-loss = tf.reduce_sum(tf.square(linear_model - y)) # sum of the squares
+  # Create the model
+  x = tf.placeholder(tf.float32, [None, 784])
+  W = tf.Variable(tf.zeros([784, 10]))
+  b = tf.Variable(tf.zeros([10]))
+  y = tf.matmul(x, W) + b
 
-# optimizer
-optimizer = tf.train.GradientDescentOptimizer(0.01)
-train = optimizer.minimize(loss)
+  # Define loss and optimizer
+  y_ = tf.placeholder(tf.float32, [None, 10])
 
-# training data
-x_train = [1,2,3,4]
-y_train = [0,-1,-2,-3]
+  # The raw formulation of cross-entropy,
+  #
+  #   tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
+  #                                 reduction_indices=[1]))
+  #
+  # can be numerically unstable.
+  #
+  # So here we use tf.nn.softmax_cross_entropy_with_logits on the raw
+  # outputs of 'y', and then average across the batch.
+  cross_entropy = tf.reduce_mean(
+      tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
+  train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
 
-# training loop
-init = tf.global_variables_initializer()
-sess = tf.Session()
-sess.run(init) # reset values to wrong
-for i in range(1000):
-  sess.run(train, {x:x_train, y:y_train})
+  sess = tf.InteractiveSession()
+  tf.global_variables_initializer().run()
+  # Train
+  for _ in range(1000):
+    batch_xs, batch_ys = mnist.train.next_batch(100)
+    sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
 
-# evaluate training accuracy
-curr_W, curr_b, curr_loss  = sess.run([W, b, loss], {x:x_train, y:y_train})
-print("W: %s b: %s loss: %s"%(curr_W, curr_b, curr_loss))
+  # Test trained model
+  correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+  accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+  print(sess.run(accuracy, feed_dict={x: mnist.test.images,
+                                      y_: mnist.test.labels}))
 
-#---------------------------------------------------------------------------------------------------
-# Method 2: (higher level using TFLearn): Define features and select an estimator to fit the data
-# NOTE: Most of these functions are deprecated, so there are lots of warnings. I just pulled
-# this code directly out of the TensorFlow tutorial
-#---------------------------------------------------------------------------------------------------
-
-# Declare list of features. We only have one real-valued feature. There are many
-# other types of columns that are more complicated and useful.
-features = [tf.contrib.layers.real_valued_column("x", dimension=1)]
-
-# An estimator is the front end to invoke training (fitting) and evaluation
-# (inference). There are many predefined types like linear regression,
-# logistic regression, linear classification, logistic classification, and
-# many neural network classifiers and regressors. The following code
-# provides an estimator that does linear regression.
-estimator = tf.contrib.learn.LinearRegressor(feature_columns=features)
-
-# TensorFlow provides many helper methods to read and set up data sets.
-# Here we use `numpy_input_fn`. We have to tell the function how many batches
-# of data (num_epochs) we want and how big each batch should be.
-x = np.array([1., 2., 3., 4.])
-y = np.array([0., -1., -2., -3.])
-input_fn = tf.contrib.learn.io.numpy_input_fn({"x":x}, y, batch_size=4, num_epochs=1000)
-
-# We can invoke 1000 training steps by invoking the `fit` method and passing the
-# training data set.
-estimator.fit(input_fn=input_fn, steps=1000)
-
-# Here we evaluate how well our model did. In a real example, we would want
-# to use a separate validation and testing data set to avoid overfitting.
-print(estimator.evaluate(input_fn=input_fn))
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data',
+                      help='Directory for storing input data')
+  FLAGS, unparsed = parser.parse_known_args()
+  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
